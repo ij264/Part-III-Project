@@ -7,9 +7,6 @@ from scipy.integrate import solve_ivp
 from joblib import Parallel, delayed
 import multiprocessing
 import itertools
-from scipy.interpolate import InterpolatedUnivariateSpline
-from scipy.optimize import curve_fit
-
 
 def Omega(L):
     '''
