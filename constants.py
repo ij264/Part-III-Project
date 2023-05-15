@@ -1,5 +1,3 @@
-import numpy as np
-
 # Saturnian radius (m)
 R_S = 6.0268e7
 
