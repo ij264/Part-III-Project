@@ -10,43 +10,10 @@ import itertools
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.optimize import curve_fit
 
-# data from Wilson et al (2009)
-# we will fit a 5th order polynomial to this function, as done in Wilson.
-
-eq_dist = np.linspace(3, 10, 29)
-v_phi = np.array([29.3, 29.8, 29.8, 30.2, 30.4, 32.1, 35.1, 38.4, 40.9, 42.8, 45.3, 47.4, 48.5, 49.1, 50., 52., 53.4, 55.3, 57., 57.2, 57.8, 58.2, 60.7, 65., 68.2, 71., 72.8, 76.7, 80.4]) * 1e3
-Omega_data = v_phi/(ct.R_S * eq_dist)
 
 def Omega(L):
     '''
-    Returns the angular frequency as a function of the normalised equatorial distance. This is based off of Wilson et al (2009) [doi:10.1029/2009GL040225]
-
-    Args:
-        L (scalar): Equatorial distance, normalised to a saturnian radius.
-    
-    Returns: 
-        Omega (float): The angular velocity evaluated at the equatorial radius.
-    '''    
-    eq_dist_sine = eq_dist[6:]
-    Omega_data_sine = Omega_data[6:]
-    # Fit a polynomial to data of order 5
-    z = np.polyfit(eq_dist[:7], Omega_data[:7], 5)
-    
-    # Define the function to fit (a sine wave)
-    def sine(x, a, b, c, d):
-        return a*np.sin(b*x + c) + d
-
-    # Fit the function to the data
-    popt, pcov = curve_fit(sine, eq_dist_sine, Omega_data_sine)
-
-    # Extract the parameters of the fitted curve
-    a, b, c, d = popt
-
-    return np.piecewise(L, [L < 4.5, L >= 4.5], [lambda L: np.poly1d(z)(L), lambda L: sine(L, a, b, c, d)])
-
-def Omega(L):
-    '''
-    Returns the angular frequency as a function of the normalised equatorial distance. This is based off of Wilson et al (2009) [doi:10.1029/2009GL040225]
+    Returns the angular frequency as a function of the normalised equatorial distance using a 5th order polynomial. This is based off of Wilson et al (2009) [doi:10.1029/2009GL040225]
 
     Args:
         L (scalar): Equatorial distance, normalised to a saturnian radius.
@@ -69,9 +36,6 @@ def Omega(L):
     # Convert to function and evaluate it at L
     return(np.poly1d(z)(L))
 
-# def Omega(L):
-#     return np.full_like(L, 0.00013)
-
 def electric_field(t, phi):
     '''
     Returns the radial and azimuthal components of the electric field model.
@@ -90,20 +54,11 @@ def electric_field(t, phi):
     # electric field amplitude (V)
     E_0 = 0.3e-3
 
-    # e-folding time (hours)
-    tau = 150 * 3600
-
-    # scaling factor
-    L_0 = 5
-
-    # unitless index controlling the electric field's spacial variation
-    gamma_bar = 0.5
-
     # radial component of electric field
-    E_r = -E_0 * np.sin(phi) * np.exp(-(t%tau)/tau)
+    E_r = E_0 * np.cos(phi) 
 
     # azimuthal component of electric field
-    E_phi = -E_0 * np.cos(phi) * np.exp(-(t%tau)/tau)
+    E_phi = -E_0 * np.sin(phi) 
 
     return(E_r, E_phi)
 
@@ -143,9 +98,10 @@ def energy(L, mu):
 
     return(E/ct.MeV)
 
-# finds where a wanted point is in array
 def find_idx(arr, wanted_arr):
     ''''
+    Sub function for plot_vector. Returns position of the elements of wanted_arr in arr.
+    
     inputs:
     arr: array that is being searched through
     wanted_arr: the list of values we are interested in
@@ -162,6 +118,24 @@ def find_idx(arr, wanted_arr):
     return(idx)
 
 def plot_vector(x, y, dx, dy, x_0=np.array([]), scale=1, color='b', norm=False):
+    '''
+    Plots vectors at x, y, with length dx, dy.
+    
+    
+    inputs:
+    x: array of x coordinates to be searched through.
+    y: array of y coordinates to be searched through.
+    dx: array of length in x coordinate.
+    dy: array of length in y coordinate.
+    x_0: starting x_coordinates.
+    scale: length scale of arrows.
+    color: colour of arrows. 
+    norm: normalise length of arrows
+    
+    returns:
+    Plots vectors at the relevant positions.
+    
+    '''
     if x_0.size != 0:
         # evaluate x at x_0
         idx = find_idx(x, x_0)
@@ -222,9 +196,13 @@ def solve_for_L_E_k(L_0, E_k_0, phi_0=0, N=1, t_f=20, met='DOP853', rtol=1e-8):
         met (str): The integration method used in solve_ivp
     '''
     
+    # starting times
     t_0 = 1e-100
+    # finishing time in seconds
     t_f = int(t_f * 3600)
+    # number of integration points
     N = int(N * np.abs(t_f))
+    # generate time array
     t = np.linspace(t_0, t_f, N)
 
     # initial relativistic momentum
@@ -232,6 +210,7 @@ def solve_for_L_E_k(L_0, E_k_0, phi_0=0, N=1, t_f=20, met='DOP853', rtol=1e-8):
     # first adiabatic invariant
     mu = p_0**2/(2 * ct.m * ct.B_S) * L_0**3
 
+    # initial conditions vector
     y_0 = np.array([L_0, phi_0])
 
     # define function with constants pre-calculated
@@ -239,20 +218,16 @@ def solve_for_L_E_k(L_0, E_k_0, phi_0=0, N=1, t_f=20, met='DOP853', rtol=1e-8):
 
     # Solve for orbit
     sol = solve_ivp(f_, [t_0, t_f], y_0, method=met, t_eval=t, rtol=rtol)
+    # if the integrator is successful
     if sol.success:
-        L, _ = sol.y
-
+        # create plots
         fig = plt.figure()
         ax = fig.add_subplot()
-        theta = np.linspace(0, 2 * np.pi, 100)
-
+        
+        # draw circle to represent Saturn
         circle1 = plt.Circle((0, 0), 1, color='black', fill=False)
         ax.add_patch(circle1)
-        max_L = np.max(L)
-        if max_L > 1: 
-            for r in range(2, int(max_L) + 2):
-                plt.plot(r*np.cos(theta), r*np.sin(theta), alpha=0, c='black')
-
+  
         plt.xlabel('$x/R_S$')
         plt.ylabel('$y/R_S$')
         ax.set_aspect('equal', adjustable='box')
@@ -268,20 +243,46 @@ def solve_for_L_E_k(L_0, E_k_0, phi_0=0, N=1, t_f=20, met='DOP853', rtol=1e-8):
         t_short = t[::step]
         phi_short = phi[::step]
         color_idx = np.linspace(0, 1, len(x_short))
-        path = '/Users/issac/Library/CloudStorage/OneDrive-UniversityofCambridge/GitHub/III-project/figures/E_damped_spikes_24hrs'
-        #path = 'C:/Users/ij264/OneDrive - University of Cambridge/GitHub/III-project/figures/E_damped_spikes_24hrs'
-        path = path + f'{phi_0/np.pi}/L_0 = {L_0}/'
+        path = output_path
+        # add initial L to path name
+        path = path + f'/L_0 = {L_0}/'
         
         color_idx = np.linspace(0, 1, len(x))
         plt.scatter(x, y, c=color_idx, cmap=plt.cm.RdYlBu_r, s=1)
+        
+        # create directory if it does not already exist
         if not os.path.exists(path):
             os.makedirs(path)
+        
+        # save figure
         plt.savefig(path + f'orbit, E_k_0 = {E_k_0/(ct.MeV):.2f} MeV.png', dpi=1000)
         
     else: return(sol.success)
 
-def orbits(L_min, L_max, L_step_size=0.25, E_k_min = 0.1, E_k_max=1.1, E_k_step_size=0.1, phi_0_min=0, phi_0_max=0, phi_step=np.pi/8, batch_size=10, N=1, t_f=20, method='DOP853', rtol=1e-6):
+def orbits(L_min, L_max, L_step_size=0.25, E_k_min = 0.1, E_k_max=1.1, E_k_step_size=0.1, phi_0_min=0, phi_0_max=0, phi_step=np.pi/8, batch_size=10, N=1, t_f=500, method='DOP853', rtol=1e-6):
 
+    '''
+    Runs the solve_for_L_E_k for a range of L, E, and phi with parallel and batch processing.
+    
+    inputs: 
+    L_min: lower range of L
+    L_max: upper range of L
+    L_step: step size
+    E_k_min: lower range of kinetic energy
+    E_k_max: upper range of kinetic energy
+    E_k_step_size: step size of kinetic energy
+    phi_0_min: lower range of starting angle
+    phi_0_max: upper range of starting angle
+    phi_step: step size of starting angle
+    batch_size: size of each batch
+    N: number of integration points
+    t_f: final time to integrate to in hours
+    method: integration method
+    rtol: relative tolerance
+    
+    returns: 
+    Runs solve_for_L_E_k
+    '''
     # set up parallel processing
     num_cores = multiprocessing.cpu_count()
 
@@ -296,14 +297,22 @@ def orbits(L_min, L_max, L_step_size=0.25, E_k_min = 0.1, E_k_max=1.1, E_k_step_
                                              for L_0, E_k_0, phi_0 in itertools.product(L_batch, E_k_batch, phi_batch))
 
 def E_CDR(L):
+    '''
+    Returns corotational drift resonance kinetic energy as a function of L.
+    
+    inputs: 
+    L: array of L values
+    
+    returns: 
+    array of CDR energy
+    '''
+    
+    # constant defined for convenience
     alpha = 2 * ct.e * ct.B_S * ct.R_S**2 / (3 * ct.m)
+    # speed
     v = np.sqrt((-alpha ** 2 * (Omega(L)) ** 2 / (L * ct.c) ** 2+ np.sqrt(alpha ** 4 * (Omega(L)) ** 4 / (L **4 * ct.c ** 4) + 4 * alpha ** 2 * (Omega(L)) ** 2 / L ** 2 )) / 2)
+    # Lorentz factor
     gamma = 1/np.sqrt(1-v**2/ct.c**2)
+    # kinetic energy
     E_k = (gamma - 1) * ct.m * ct.c**2/ct.MeV
     return(E_k)
-
-def speed(x, y, t):
-    v_x = np.gradient(x, t)
-    v_y = np.gradient(y, t)
-    
-    return np.sqrt(v_x**2 + v_y**2)
